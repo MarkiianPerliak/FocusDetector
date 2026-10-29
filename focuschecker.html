@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Focus Detector</title>
+</head>
+<body>
+<h1>Focus Detector</h1>
+<p>Press the button to enter fullscreen. Leaving fullscreen, switching tabs or windows, or opening another app will be logged.</p>
+<button id="start">Go fullscreen</button>
+<p id="status">Status: not started</p>
+<p>Violations: <span id="count">0</span></p>
+<ul id="log"></ul>
+
+<script>
+let active = false;
+let violations = 0;
+
+const statusEl = document.getElementById("status");
+const countEl = document.getElementById("count");
+const logEl = document.getElementById("log");
+
+function flag(reason) {
+  if (!active) return;
+  violations++;
+  countEl.textContent = violations;
+  const li = document.createElement("li");
+  li.textContent = new Date().toLocaleTimeString() + " - " + reason;
+  logEl.appendChild(li);
+  statusEl.textContent = "Status: VIOLATION - " + reason;
+}
+
+function ok() {
+  if (active && document.fullscreenElement && document.hasFocus() && !document.hidden) {
+    statusEl.textContent = "Status: OK (fullscreen, focused)";
+  }
+}
+
+document.getElementById("start").addEventListener("click", async () => {
+  try {
+    await document.documentElement.requestFullscreen();
+    active = true;
+    ok();
+  } catch (e) {
+    statusEl.textContent = "Status: could not enter fullscreen (" + e.message + ")";
+  }
+});
+
+// Left fullscreen (Esc, F11, etc.)
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement) {
+    flag("Exited fullscreen");
+  } else {
+    ok();
+  }
+});
+
+// Switched tab, minimized, or Chromebook overview / another app took over
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) flag("Page hidden (tab switch, minimized or another app opened)");
+  else ok();
+});
+
+// Window lost focus (another window/app, Alt+Tab, launcher, DevTools, etc.)
+window.addEventListener("blur", () => flag("Window lost focus"));
+window.addEventListener("focus", ok);
+
+// Leaving or closing the page
+window.addEventListener("pagehide", () => flag("Page left"));
+window.addEventListener("beforeunload", (e) => {
+  if (active) { e.preventDefault(); e.returnValue = ""; }
+});
+
+// Copy/paste, right click and common shortcuts
+document.addEventListener("contextmenu", (e) => { if (active) { e.preventDefault(); flag("Right click"); } });
+document.addEventListener("copy", () => flag("Copy attempt"));
+document.addEventListener("paste", () => flag("Paste attempt"));
+document.addEventListener("keydown", (e) => {
+  if (!active) return;
+  if (e.key === "Meta" || e.key === "OS") flag("Meta/Search key pressed");
+  if (e.key === "F12" || (e.ctrlKey && e.shiftKey && ["I", "J", "C"].includes(e.key.toUpperCase()))) {
+    e.preventDefault();
+    flag("DevTools shortcut");
+  }
+});
+
+// Window resized out of fullscreen size
+window.addEventListener("resize", () => {
+  if (active && !document.fullscreenElement) flag("Window resized");
+});
+</script>
+</body>
+</html>
